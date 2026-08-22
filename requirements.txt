@@ -1,0 +1,9 @@
+pydantic
+fastapi
+uvicorn
+langchain_text_splitters
+chromadb
+openai
+sentence_transformers
+pypdf2
+
