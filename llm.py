@@ -1,5 +1,11 @@
+import os
+from dotenv import load_dotenv
 from openai import OpenAI
-from .env import OPENAI_API_KEY
+# from env import OPENAI_API_KEY
+
+load_dotenv()
+
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 class LLMservice:
     def __init__(self):

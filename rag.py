@@ -2,6 +2,7 @@ from ingestion import extract_pdf_text
 from preprocessing import clean_text, split_text
 from embeddings import EmbeddingService
 from vector_db import VectorDB
+from llm import LLMservice
 
 from config import FILE_UPLOAD_DIR
 
@@ -40,5 +41,24 @@ def start_ingestion(pdf_path):
     print(f"Ingestion completed for {pdf_path}. Total chunks added: {len(text_chunks)}")
 
 
-start_ingestion(pdf_path)
+# start_ingestion(pdf_path)
 
+def call_llm_with_query(query):
+    """
+    Calls the LLM with a given query and retrieves relevant documents from the vector database.
+
+    Args:
+        query (str): The query to be processed by the LLM.
+    """
+    vector_db = VectorDB()
+    results = vector_db.query(query)
+    print("--> Query results retrieved from the vector database", len(results))
+    llm_service = LLMservice()
+
+    response = llm_service.ask_question(query, results)
+
+    print("\n\n ** Thinking --> ", response)
+
+    return response
+
+call_llm_with_query("What is the main topic of the document?")
