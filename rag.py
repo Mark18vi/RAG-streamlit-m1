@@ -39,6 +39,7 @@ def start_ingestion(pdf_path):
     print("--> Text chunks added to the vector database")
 
     print(f"Ingestion completed for {pdf_path}. Total chunks added: {len(text_chunks)}")
+    return 200
 
 
 # start_ingestion(pdf_path)
@@ -61,4 +62,4 @@ def call_llm_with_query(query):
 
     return response
 
-call_llm_with_query("What is the main topic of the document?")
+call_llm_with_query("where Fifa 2026 has been held?")
