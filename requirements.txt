@@ -1,9 +1,17 @@
-pydantic
-fastapi
-uvicorn
-langchain_text_splitters
-chromadb
-openai
-sentence_transformers
-pypdf2
+# pydantic
+# fastapi
+# uvicorn
+# langchain_text_splitters
+# chromadb
+# openai
+# sentence_transformers
+# pypdf2
+
+fastapi ==0.141.1
+uvicorn== 0.52.4
+langchain_text_splitters==1.1.2
+chromadb==1.5.9
+openai==3.5.0
+sentence_transformers==6.0.0
+pypdf2==3.0.1
 

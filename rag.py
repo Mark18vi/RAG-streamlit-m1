@@ -41,7 +41,7 @@ def start_ingestion(pdf_path):
     print(f"Ingestion completed for {pdf_path}. Total chunks added: {len(text_chunks)}")
 
 
-# start_ingestion(pdf_path)
+#start_ingestion(pdf_path)
 
 def call_llm_with_query(query):
     """
