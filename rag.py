@@ -62,4 +62,4 @@ def call_llm_with_query(query):
 
     return response
 
-call_llm_with_query("where Fifa 2026 has been held?")
+# call_llm_with_query("where Fifa 2026 has been held?")
