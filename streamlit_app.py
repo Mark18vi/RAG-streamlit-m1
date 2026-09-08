@@ -1,5 +1,5 @@
 import streamlit as st
-from rag import start_ingestion, call_llm_with_query
+from rag import start_ingestion, call_llm_with_query, call_research_assistant
 
 # st.title("RAG Information App")
 
@@ -17,6 +17,12 @@ with st.sidebar:
         The app uses a vector database to store the content of the PDF and a language model to answer your questions.
         """
     )
+    
+    st.divider()
+    st.header("Assistant Mode")
+    mode = st.radio("Select Mode", ["Document RAG", "Live Research Assistant"], index=0)
+    
+    st.divider()
     st.header("Upload your PDF file")
 
     uploaded_file = st.file_uploader("Choose a PDF file", type="pdf")
@@ -44,13 +50,14 @@ with st.sidebar:
 st.divider()
 
 # chat interface
-st.header("Ask questions about the documents")
+st.header(f"Ask questions ({mode})")
 
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-question = st.chat_input("Ask a question about the documents")
+placeholder_text = "Ask a question about the documents" if mode == "Document RAG" else "Ask a live research question (e.g. 'Where is Fifa 2026 held?')"
+question = st.chat_input(placeholder_text)
 
 if question:
     st.session_state.messages.append({"role": "user", "content": question})
@@ -58,9 +65,12 @@ if question:
         st.markdown(question)
 
     with st.spinner("Thinking..."):
-        from rag import call_llm_with_query
-
-        response = call_llm_with_query(question)
+        if mode == "Document RAG":
+            from rag import call_llm_with_query
+            response = call_llm_with_query(question)
+        else:
+            from rag import call_research_assistant
+            response = call_research_assistant(question)
 
         st.session_state.messages.append({"role": "assistant", "content": response})
         with st.chat_message("assistant"):

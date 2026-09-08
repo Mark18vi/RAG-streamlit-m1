@@ -36,4 +36,16 @@ class LLMservice:
         )
         return response.choices[0].message.content.strip()
 
+    def call_with_tools(self, messages, tools):
+        """
+        Call LLM with tool definitions and handle the response.
+        """
+        response = self.client.chat.completions.create(
+            model=self.model,
+            messages=messages,
+            tools=tools,
+            tool_choice="auto"
+        )
+        return response.choices[0].message
+
 
