@@ -1,20 +1,27 @@
 from neo4j import GraphDatabase
 from config import NEO4J_URI, NEO4J_USERNAME, NEO4J_PASSWORD
 from embeddings import EmbeddingService
+from logging_config import get_logger
+
+logger = get_logger(__name__)
 
 class GraphDB:
     def __init__(self):
+        logger.info("Opening Neo4j driver: uri=%s user=%s", NEO4J_URI, NEO4J_USERNAME)
         self.driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USERNAME, NEO4J_PASSWORD))
         self.embedding_service = EmbeddingService()
+        logger.info("Neo4j driver and graph embedding service initialized")
 
     def close(self):
         self.driver.close()
+        logger.info("Neo4j driver closed")
 
     def add_triplets(self, triplets):
         """
         Adds SPO triplets to Neo4j.
         triplets: List of (subject, predicate, object)
         """
+        logger.info("Neo4j triplet write started: triplets=%d", len(triplets))
         with self.driver.session() as session:
             for s, p, o in triplets:
                 # Generate embeddings for subject and object for hybrid search
@@ -22,6 +29,7 @@ class GraphDB:
                 o_embedding = self.embedding_service.get_embedding(o)
                 
                 session.execute_write(self._create_triplet, s, p, o, s_embedding, o_embedding)
+        logger.info("Neo4j triplet write completed: triplets=%d", len(triplets))
 
     @staticmethod
     def _create_triplet(tx, s, p, o, s_emb, o_emb):
@@ -39,6 +47,7 @@ class GraphDB:
         """
         Retrieves the neighborhood of a given entity.
         """
+        logger.info("Neo4j graph query started: entity=%s", entity_name)
         with self.driver.session() as session:
             query = """
             MATCH (e:Entity {name: $name})-[r*1..$depth]-(neighbor)
@@ -50,7 +59,9 @@ class GraphDB:
             RETURN e.name as start, r.predicate as predicate, neighbor.name as end
             """
             result = session.run(query, name=entity_name)
-            return [record.data() for record in result]
+            records = [record.data() for record in result]
+            logger.info("Neo4j graph query completed: entity=%s facts=%d", entity_name, len(records))
+            return records
 
     def hybrid_search(self, query_text, vector_results):
         """
@@ -76,4 +87,3 @@ class GraphDB:
         # 2. Traverse the graph from those nodes to find related facts.
         
         return context_fragments
-

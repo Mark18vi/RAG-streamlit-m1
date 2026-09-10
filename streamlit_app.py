@@ -1,5 +1,8 @@
 import streamlit as st
 from rag import start_ingestion, call_llm_with_query, call_research_assistant
+from logging_config import get_logger
+
+logger = get_logger(__name__)
 
 # st.title("RAG Information App")
 
@@ -30,6 +33,7 @@ with st.sidebar:
     if uploaded_file is not None:
 
         if st.button("Start Ingestion"):
+            logger.info("UI action: ingestion requested file=%s", uploaded_file.name)
             with st.spinner("Ingesting the PDF..."):
                 from rag import start_ingestion
 
@@ -38,13 +42,15 @@ with st.sidebar:
                 with open(temp_file_path, "wb") as f:
                     f.write(uploaded_file.getbuffer())
 
-                print(f"Temporary file saved at: {temp_file_path}")
+                logger.info("Uploaded file saved: path=%s bytes=%d", temp_file_path, uploaded_file.size)
                 # Start the ingestion process
                 response = start_ingestion(temp_file_path)
 
                 if response == 200:
+                    logger.info("UI action completed: ingestion succeeded")
                     st.success("Ingestion completed successfully!")
                 else:
+                    logger.error("UI action failed: ingestion response=%s", response)
                     st.error("Ingestion failed. Please try again.")
 
 st.divider()
@@ -55,11 +61,38 @@ st.header(f"Ask questions ({mode})")
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
+        if message["role"] == "assistant" and message.get("retrieval"):
+            retrieval = message["retrieval"]
+            vector_count = len(retrieval.get("vector", []))
+            graph_count = len(retrieval.get("graph", []))
+            with st.expander(
+                f"Retrieval details · {vector_count} vector chunks · {graph_count} Neo4j facts"
+            ):
+                st.caption(
+                    "Hybrid retrieval combines semantic vector matches with SPO relationships from Neo4j."
+                )
+                st.markdown(f"**Entities used for graph expansion:** {', '.join(retrieval.get('entities', [])) or 'None'}")
+                st.markdown("**Vector search results**")
+                for item in retrieval.get("vector", []):
+                    st.markdown(
+                        f"**#{item['rank']}** · distance `{item['distance']:.4f}`"
+                    )
+                    st.caption(item["document"])
+                st.markdown("**Neo4j SPO results**")
+                if graph_count:
+                    for fact in retrieval["graph"]:
+                        st.code(
+                            f"{fact['subject']} --[{fact['predicate']}]--> {fact['object']}",
+                            language="text",
+                        )
+                else:
+                    st.caption("No matching Neo4j relationships were found.")
 
 placeholder_text = "Ask a question about the documents" if mode == "Document RAG" else "Ask a live research question (e.g. 'Where is Fifa 2026 held?')"
 question = st.chat_input(placeholder_text)
 
 if question:
+    logger.info("UI action: question submitted mode=%s query_characters=%d", mode, len(question))
     st.session_state.messages.append({"role": "user", "content": question})
     with st.chat_message("user"):
         st.markdown(question)
@@ -67,11 +100,45 @@ if question:
     with st.spinner("Thinking..."):
         if mode == "Document RAG":
             from rag import call_llm_with_query
-            response = call_llm_with_query(question)
+            result = call_llm_with_query(question)
+            response = result["answer"]
+            retrieval = result["retrieval"]
         else:
             from rag import call_research_assistant
             response = call_research_assistant(question)
+            retrieval = None
+        logger.info("UI action completed: response generated mode=%s", mode)
 
-        st.session_state.messages.append({"role": "assistant", "content": response})
+        st.session_state.messages.append(
+            {"role": "assistant", "content": response, "retrieval": retrieval}
+        )
         with st.chat_message("assistant"):
             st.markdown(response)
+            if retrieval:
+                vector_count = len(retrieval.get("vector", []))
+                graph_count = len(retrieval.get("graph", []))
+                with st.expander(
+                    f"Retrieval details · {vector_count} vector chunks · {graph_count} Neo4j facts"
+                ):
+                    st.caption(
+                        "Hybrid retrieval combines semantic vector matches with SPO relationships from Neo4j."
+                    )
+                    st.markdown(
+                        f"**Entities used for graph expansion:** "
+                        f"{', '.join(retrieval.get('entities', [])) or 'None'}"
+                    )
+                    st.markdown("**Vector search results**")
+                    for item in retrieval.get("vector", []):
+                        st.markdown(
+                            f"**#{item['rank']}** · distance `{item['distance']:.4f}`"
+                        )
+                        st.caption(item["document"])
+                    st.markdown("**Neo4j SPO results**")
+                    if graph_count:
+                        for fact in retrieval["graph"]:
+                            st.code(
+                                f"{fact['subject']} --[{fact['predicate']}]--> {fact['object']}",
+                                language="text",
+                            )
+                    else:
+                        st.caption("No matching Neo4j relationships were found.")

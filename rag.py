@@ -7,10 +7,12 @@ from vector_db import VectorDB
 from llm import LLMservice
 import json
 import requests
+from logging_config import get_logger
 
 from config import FILE_UPLOAD_DIR
 
 files_path = FILE_UPLOAD_DIR
+logger = get_logger(__name__)
 
 pdf_path = files_path + "\\fifa_rag.pdf"  # Replace with the actual PDF file name
 
@@ -21,28 +23,25 @@ def start_ingestion(pdf_path):
     Args:
         pdf_path (str): The path to the PDF file.
     """
+    logger.info("Ingestion flow started: file=%s", pdf_path)
     # Step 1: Extract text from the PDF
     raw_text = extract_pdf_text(pdf_path)
 
-    print("--> Raw text extracted from PDF")
-
     # Step 2: Clean the extracted text
     cleaned_text = clean_text(raw_text)
-    print("--> Text cleaned")
 
     # Step 3: Split the cleaned text into chunks
     text_chunks = split_text(cleaned_text)
-    print(f"--> Text split into {len(text_chunks)} chunks")
 
     # Step 4: Initialize the vector database
     vector_db = VectorDB()
-    print("--> Vector database initialized")
 
-    # Step 5: Add the text chunks to the vector database
-    vector_db.add_documents(text_chunks)
-    print("--> Text chunks added to the vector database")
+    # Step 5: Initialize LLM for SPO extraction
+    llm_service = LLMservice()
 
-    print(f"Ingestion completed for {pdf_path}. Total chunks added: {len(text_chunks)}")
+    logger.info("Starting storage flow: ChromaDB and Neo4j")
+    vector_db.add_documents(text_chunks, llm_service=llm_service)
+    logger.info("Ingestion flow completed: file=%s chunks=%d", pdf_path, len(text_chunks))
     return 200
 
 
@@ -55,16 +54,21 @@ def call_llm_with_query(query):
     Args:
         query (str): The query to be processed by the LLM.
     """
+    logger.info("Document question flow started: query_characters=%d", len(query))
     vector_db = VectorDB()
     results = vector_db.query(query)
-    print("--> Query results retrieved from the vector database", len(results))
+    retrieval_trace = results["trace"]
+    logger.info(
+        "Hybrid retrieval completed: vector_chunks=%d neo4j_facts=%d",
+        len(retrieval_trace["vector"]),
+        len(retrieval_trace["graph"]),
+    )
     llm_service = LLMservice()
 
-    response = llm_service.ask_question(query, results)
+    response = llm_service.ask_question(query, results["context"])
 
-    print("\n\n ** Thinking --> ", response)
-
-    return response
+    logger.info("Document question flow completed")
+    return {"answer": response, "retrieval": retrieval_trace}
 
 # call_llm_with_query("where Fifa 2026 has been held?")
 
@@ -73,7 +77,7 @@ TAVILY_KEY = os.getenv("TAVILY_KEY")
 
 def mock_google_search(query):
     """Perfrom real time web search using TAVILY API."""
-    print(f" [Tool] Searching Google for: {query}...")
+    logger.info("Research tool started: web_search query_characters=%d", len(query))
 
     url = "https://api.tavily.com/search"
 
@@ -105,20 +109,26 @@ def mock_google_search(query):
         })
 
         
-    return "\n\n".join([str(result) for result in results])
+    output = "\n\n".join([str(result) for result in results])
+    logger.info("Research tool completed: web_search results=%d", len(results))
+    return output
 
 def mock_calculator(expression):
     """Simulates a calculator tool."""
-    print(f" [Tool] Calculating: {expression}...")
+    logger.info("Research tool started: calculator")
     try:
-        return str(eval(expression))
+        result = str(eval(expression))
+        logger.info("Research tool completed: calculator")
+        return result
     except Exception as e:
+        logger.exception("Research tool failed: calculator")
         return f"Error calculating: {str(e)}"
 
 def call_research_assistant(query):
     """
     Implements a ReAct loop using LLM Function Calling.
     """
+    logger.info("Live research flow started: query_characters=%d", len(query))
     llm_service = LLMservice()
     
     tools = [
@@ -159,6 +169,7 @@ def call_research_assistant(query):
 
     max_iterations = 5
     for i in range(max_iterations):
+        logger.info("Live research iteration started: iteration=%d", i + 1)
         response_message = llm_service.call_with_tools(messages, tools)
         
         if response_message.tool_calls:
@@ -172,6 +183,7 @@ def call_research_assistant(query):
                 elif function_name == "calculator":
                     result = mock_calculator(function_args.get("expression"))
                 else:
+                    logger.warning("Unknown tool requested: %s", function_name)
                     result = "Tool not found."
                 
                 messages.append({
@@ -181,6 +193,8 @@ def call_research_assistant(query):
                     "content": result
                 })
         else:
+            logger.info("Live research flow completed: iterations=%d", i + 1)
             return response_message.content
 
+    logger.warning("Live research flow reached iteration limit: limit=%d", max_iterations)
     return "Reached maximum iterations without a final answer."
