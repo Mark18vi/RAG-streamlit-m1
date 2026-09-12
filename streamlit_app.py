@@ -4,6 +4,7 @@ from travel_planner import (
     apply_travel_answer,
     approve_trip,
     build_travel_graph,
+    get_memory_snapshot,
     is_waiting_for_approval,
     next_travel_question,
     start_trip,
@@ -17,20 +18,35 @@ def _render_travel_results(data):
     recommendation_index = data.get("recommendation_index", 0)
     flights = data.get("flight_options", [])
     hotels = data.get("hotel_options", [])
-    locations = data.get("location_options", [])
-
-    st.markdown("### Live trip recommendations")
-    if flights:
+    selected_flight = data.get("selected_flight")
+    selected_hotel = data.get("selected_hotel")
+    if selected_flight:
+        flight = selected_flight
+    elif flights:
         flight = flights[min(recommendation_index, len(flights) - 1)]
-        st.markdown("#### Recommended flight")
+    else:
+        flight = None
+    if selected_hotel:
+        hotel = selected_hotel
+    elif hotels:
+        hotel = hotels[min(recommendation_index, len(hotels) - 1)]
+    else:
+        hotel = None
+
+    st.markdown(
+        f"### Recommendation {recommendation_index + 1}: "
+        f"{data.get('request', {}).get('destination', 'your destination')}"
+    )
+    if flight:
+        st.markdown("#### ✈️ Recommended flight")
         st.markdown(f"**{flight.get('title', 'Flight option')}**")
         st.caption(flight.get("description", "Live flight information"))
-        if flight.get("rating") != "Rating not reported":
-            st.write(f"Rating: {flight['rating']}")
+        st.write(
+            "Why this option: matches your requested route, travel date, and cabin preference."
+        )
 
-    if hotels:
-        hotel = hotels[min(recommendation_index, len(hotels) - 1)]
-        st.markdown("#### Recommended hotel")
+    if hotel:
+        st.markdown("#### 🏨 Recommended hotel")
         hotel_columns = st.columns([1, 2])
         with hotel_columns[0]:
             if hotel.get("image"):
@@ -39,19 +55,76 @@ def _render_travel_results(data):
             st.markdown(f"**{hotel.get('title', 'Hotel option')}**")
             st.write(f"Rating: {hotel.get('rating', 'Rating not reported')}")
             st.caption(hotel.get("description", "Live hotel information"))
+            st.write(hotel.get("why_visit", "Selected from current live hotel research."))
 
     itinerary = data.get("itinerary", [])
     if itinerary:
-        st.markdown("#### Country itinerary")
-        location_columns = st.columns(min(3, len(itinerary)))
-        for index, item in enumerate(itinerary):
-            with location_columns[index % len(location_columns)]:
-                location = locations[index] if index < len(locations) else {}
-                if location.get("image"):
-                    st.image(location["image"], use_container_width=True)
-                st.markdown(f"**Day {item['day']}: {item['location']}**")
-                st.write(f"Rating: {item['rating']}")
-                st.caption(item["date"])
+        st.markdown("#### 🗺️ Day-by-day country itinerary")
+        map_points = []
+        for item in itinerary:
+            if item.get("latitude") and item.get("longitude"):
+                map_points.append(
+                    {
+                        "latitude": item["latitude"],
+                        "longitude": item["longitude"],
+                        "day": item["day"],
+                        "location": item["location"],
+                    }
+                )
+        if map_points:
+            st.map(map_points, latitude="latitude", longitude="longitude", zoom=5)
+            st.caption("Route overview using OpenStreetMap location data.")
+        for item in itinerary:
+            with st.container(border=True):
+                columns = st.columns([1, 2])
+                with columns[0]:
+                    if item.get("image"):
+                        st.image(item["image"], use_container_width=True)
+                with columns[1]:
+                    st.markdown(f"**Day {item['day']} · {item['date']}**")
+                    st.subheader(item["location"])
+                    st.write(f"Rating: {item['rating']}")
+                    st.caption(item.get("description", "Live location information"))
+                    st.write(item.get("why_visit", "Selected from current travel research."))
+
+
+def _render_memory_tooltip():
+    """Render graph memory as a compact bottom-of-chat popover."""
+    snapshot = get_memory_snapshot(
+        st.session_state.travel_graph,
+        st.session_state.get("travel_thread_id"),
+        st.session_state.travel_details,
+        st.session_state.travel_memory,
+        st.session_state.get("travel_result"),
+    )
+    nodes = [
+        ("intake", "Chat intake"),
+        ("plan_trip", "Plan trip"),
+        ("search_flights", "Live flights"),
+        ("summarize_hotels", "Hotels"),
+        ("search_locations", "Locations"),
+        ("build_itinerary", "Itinerary"),
+        ("request_approval", "Approval"),
+        ("finalize", "Final plan"),
+    ]
+    active = snapshot["active_node"]
+    graph_lines = ["digraph {", "rankdir=LR;", 'node [shape=box style="rounded,filled" fontname="Arial"];']
+    for index, (node_id, label) in enumerate(nodes):
+        color = "#b7e4c7" if node_id == active else "#e8eef7"
+        graph_lines.append(f'"{node_id}" [label="{label}" fillcolor="{color}"];')
+        if index:
+            graph_lines.append(f'"{nodes[index - 1][0]}" -> "{node_id}";')
+    graph_lines.append("}")
+
+    with st.popover("🧠 Agent memory", use_container_width=False):
+        st.caption("LangGraph checkpoint memory and session preference memory")
+        st.graphviz_chart("\n".join(graph_lines), use_container_width=True)
+        st.markdown(f"**Active node:** `{active}`")
+        st.markdown(f"**Thread checkpoint:** `{snapshot['thread_id']}`")
+        st.markdown("**Short-term memory**")
+        st.json(snapshot["short_term"])
+        st.markdown("**Long-term memory**")
+        st.json(snapshot["long_term"] or {"status": "No saved preferences yet"})
 
 
 st.set_page_config(page_title="RAG Information App", page_icon=":guardsman:", layout="wide")
@@ -120,15 +193,24 @@ if mode == "Travel Planner":
                 st.session_state.travel_thread_id,
                 False,
             )
+            if is_waiting_for_approval(st.session_state.travel_result):
+                next_index = st.session_state.travel_result["__interrupt__"][0].value.get(
+                    "recommendation_index", 1
+                )
+                st.session_state.travel_chat_messages.append(
+                    {
+                        "role": "assistant",
+                        "content": (
+                            f"That option was rejected. Here is recommendation "
+                            f"{next_index + 1} for comparison."
+                        ),
+                    }
+                )
             st.rerun()
     elif result and result.get("summary"):
         with st.chat_message("assistant"):
             st.markdown(result["summary"])
             _render_travel_results(result)
-        st.caption(
-            "Short-term memory: this graph run is checkpointed by thread. "
-            "Long-term memory: your hotel-area preference is kept in this session."
-        )
     else:
         question = st.chat_input("Answer the travel planner")
         if question:
@@ -163,6 +245,8 @@ if mode == "Travel Planner":
                     reply = "I have prepared flight and hotel options. Please review them below."
             st.session_state.travel_chat_messages.append({"role": "assistant", "content": reply})
             st.rerun()
+    st.divider()
+    _render_memory_tooltip()
     st.stop()
     
     st.divider()

@@ -154,6 +154,20 @@ def _tavily_search(query: str, result_type: str) -> list[dict[str, Any]]:
     ]
 
 
+def _geocode_location(name: str) -> tuple[float | None, float | None]:
+    response = requests.get(
+        "https://nominatim.openstreetmap.org/search",
+        params={"q": name, "format": "jsonv2", "limit": 1},
+        headers={"User-Agent": "travel-planner-streamlit/1.0"},
+        timeout=10,
+    )
+    response.raise_for_status()
+    matches = response.json()
+    if not matches:
+        return None, None
+    return float(matches[0]["lat"]), float(matches[0]["lon"])
+
+
 def _live_search_or_empty(query: str, result_type: str) -> tuple[list[dict[str, Any]], str | None]:
     try:
         return _tavily_search(query, result_type), None
@@ -179,6 +193,11 @@ def _summarize_hotels(state: TravelState) -> dict[str, Any]:
         f"best hotels in {request['destination']} near {preferred_area} current reviews ratings price",
         "hotel",
     )
+    for hotel in hotels:
+        hotel["why_visit"] = (
+            f"Fits your preference for {preferred_area} and is selected from current "
+            "hotel reviews and availability discussions."
+        )
     return {"hotel_options": hotels, "live_search_error": error or state.get("live_search_error", "")}
 
 
@@ -196,6 +215,11 @@ def _build_itinerary(state: TravelState) -> dict[str, Any]:
             "location": locations[day - 1]["title"],
             "rating": locations[day - 1]["rating"],
             "url": locations[day - 1]["url"],
+            "image": locations[day - 1].get("image", ""),
+            "description": locations[day - 1].get("description", ""),
+            "why_visit": locations[day - 1].get("why_visit", ""),
+            "latitude": locations[day - 1].get("latitude"),
+            "longitude": locations[day - 1].get("longitude"),
         }
         for day in range(1, visit_count + 1)
     ]
@@ -208,6 +232,23 @@ def _search_locations(state: TravelState) -> dict[str, Any]:
         f"best cities and places to visit in {destination} ratings current travel guide",
         "location",
     )
+    try:
+        country_latitude, country_longitude = _geocode_location(destination)
+    except requests.RequestException:
+        country_latitude, country_longitude = None, None
+    for location in locations:
+        location["why_visit"] = (
+            f"Recommended for a {state['request']['return']} return date and your "
+            f"{state.get('preferences', {}).get('hotel_area', 'central')} base preference."
+        )
+        try:
+            latitude, longitude = _geocode_location(
+                f"{location['title']} {destination}"
+            )
+        except requests.RequestException:
+            latitude, longitude = None, None
+        location["latitude"] = latitude if latitude is not None else country_latitude
+        location["longitude"] = longitude if longitude is not None else country_longitude
     return {
         "location_options": locations,
         "live_search_error": error or state.get("live_search_error", ""),
@@ -217,6 +258,11 @@ def _search_locations(state: TravelState) -> dict[str, Any]:
 def _request_approval(state: TravelState) -> dict[str, Any]:
     from langgraph.types import interrupt
 
+    index = min(
+        state.get("recommendation_index", 0),
+        max(0, len(state.get("flight_options", [])) - 1),
+        max(0, len(state.get("hotel_options", [])) - 1),
+    )
     approval = interrupt(
         {
             "message": "Review the proposed trip before generating the final itinerary.",
@@ -225,7 +271,9 @@ def _request_approval(state: TravelState) -> dict[str, Any]:
             "hotel_options": state["hotel_options"],
             "location_options": state.get("location_options", []),
             "itinerary": state.get("itinerary", []),
-            "recommendation_index": state.get("recommendation_index", 0),
+            "recommendation_index": index,
+            "selected_flight": state.get("flight_options", [{}])[index],
+            "selected_hotel": state.get("hotel_options", [{}])[index],
         }
     )
     index = state.get("recommendation_index", 0)
@@ -258,7 +306,7 @@ def _finalize(state: TravelState) -> dict[str, Any]:
     itinerary = state.get("itinerary", [])
     live_error = state.get("live_search_error")
     itinerary_lines = "\n".join(
-        f"- **Day {item['day']} ({item['date']}):** [{item['location']}]({item['url']}) "
+        f"- **Day {item['day']} ({item['date']}):** {item['location']} "
         f"- rating: {item['rating']}"
         for item in itinerary
     ) or "No live attraction results were returned."
@@ -303,6 +351,7 @@ def build_travel_graph() -> Any:
         {"request_approval": "request_approval", "finalize": "finalize"},
     )
     workflow.add_edge("finalize", END)
+
     return workflow.compile(checkpointer=MemorySaver())
 
 
@@ -326,3 +375,40 @@ def approve_trip(graph: Any, thread_id: str, approved: bool) -> dict[str, Any]:
 
 def is_waiting_for_approval(result: dict[str, Any]) -> bool:
     return bool(result.get("__interrupt__"))
+
+
+def get_memory_snapshot(
+    graph: Any,
+    thread_id: str | None,
+    details: dict[str, Any],
+    long_term_memory: dict[str, Any],
+    result: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Expose a safe, UI-friendly view of graph and session memory."""
+    checkpoint_values: dict[str, Any] = {}
+    if thread_id:
+        checkpoint = graph.get_state({"configurable": {"thread_id": thread_id}})
+        checkpoint_values = checkpoint.values or {}
+
+    if result and is_waiting_for_approval(result):
+        active_node = "request_approval"
+    elif result and result.get("summary"):
+        active_node = "finalize"
+    elif details:
+        active_node = "intake"
+    else:
+        active_node = "idle"
+
+    return {
+        "active_node": active_node,
+        "thread_id": thread_id or "not started",
+        "short_term": {
+            "fields_collected": sorted(details.keys()),
+            "checkpoint_keys": sorted(checkpoint_values.keys()),
+            "recommendation_index": checkpoint_values.get(
+                "recommendation_index",
+                result.get("recommendation_index", 0) if result else 0,
+            ),
+        },
+        "long_term": dict(long_term_memory),
+    }
