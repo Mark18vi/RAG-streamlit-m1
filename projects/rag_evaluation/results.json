@@ -1,0 +1,38 @@
+[
+  {
+    "id": "champion",
+    "question": "Which country won the 2026 FIFA World Cup?",
+    "answer": "Spain won the 2026 FIFA World Cup.",
+    "precision": 1.0,
+    "recall": 1.0,
+    "faithfulness": 1.0,
+    "faithfulness_reason": "{'reasons': [{'criteria': 'Spain won the 2026 FIFA World Cup.', 'supporting_evidence': 'Criteria: Spain won the 2026 FIFA World Cup.\\nSupporting Evidence: Spain won the 2026 FIFA World Cup, securing their second global title by defeating Argentina 10 after extra time in the final at MetLife Stadium New YorkNew Jersey on July 19, 2026.', 'score': 1.0}]}"
+  },
+  {
+    "id": "format",
+    "question": "How many teams played in the expanded 2026 FIFA World Cup format?",
+    "answer": "The expanded 2026 FIFA World Cup format featured 48 teams.",
+    "precision": 0.9,
+    "recall": 0.9,
+    "faithfulness": 1.0,
+    "faithfulness_reason": "{'reasons': [{'criteria': 'The expanded 2026 FIFA World Cup format featured 48 teams.', 'supporting_evidence': 'Criteria: The expanded 2026 FIFA World Cup format featured 48 teams.\\nSupporting Evidence: The 2026 edition was a historic milestone for international soccer, expanding for the first time to a 48team format and spanning 104 total matches over 39 days.', 'score': 1.0}]}"
+  },
+  {
+    "id": "co_hosts",
+    "question": "Which countries co-hosted the 2026 FIFA World Cup?",
+    "answer": "The 2026 FIFA World Cup was co-hosted by the United States, Mexico, and Canada.",
+    "precision": 0.8571,
+    "recall": 1.0,
+    "faithfulness": 1.0,
+    "faithfulness_reason": "{'reasons': [{'criteria': 'The 2026 FIFA World Cup was co-hosted by the United States, Mexico, and Canada.', 'supporting_evidence': 'Criteria: The 2026 FIFA World Cup was co-hosted by the United States, Mexico, and Canada.\\nSupporting Evidence: Cohosted by three nationsthe United States, Mexico, and Canadaacross 16 vibrant host cities, the tournament returned to its traditional JuneJuly window.', 'score': 1.0}]}"
+  },
+  {
+    "id": "opening_match",
+    "question": "Where was the opening match of the 2026 FIFA World Cup played?",
+    "answer": "The opening match of the 2026 FIFA World Cup was played at the Estadio Azteca in Mexico City.",
+    "precision": 0.6875,
+    "recall": 1.0,
+    "faithfulness": 1.0,
+    "faithfulness_reason": "{'reasons': [{'criteria': 'The opening match of the 2026 FIFA World Cup was played at the Estadio Azteca in Mexico City.', 'supporting_evidence': 'Criteria: The opening match of the 2026 FIFA World Cup was played at the Estadio Azteca in Mexico City.\\nSupporting Evidence: The tournament opened at the legendary Estadio Azteca in Mexico City on June 11, where Mexico defeated South Africa 20.', 'score': 1.0}]}"
+  }
+]

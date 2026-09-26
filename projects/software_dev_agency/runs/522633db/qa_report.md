@@ -1,0 +1,1 @@
+PASS — implementation includes the main function, empty-input validation, and a focused test.

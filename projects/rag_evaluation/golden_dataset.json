@@ -1,0 +1,26 @@
+[
+  {
+    "id": "champion",
+    "question": "Which country won the 2026 FIFA World Cup?",
+    "reference_answer": "Spain won the 2026 FIFA World Cup.",
+    "expected_facts": ["Spain", "2026 FIFA World Cup"]
+  },
+  {
+    "id": "format",
+    "question": "How many teams played in the expanded 2026 FIFA World Cup format?",
+    "reference_answer": "The expanded 2026 FIFA World Cup format had 48 teams.",
+    "expected_facts": ["48 teams", "expanded format"]
+  },
+  {
+    "id": "co_hosts",
+    "question": "Which countries co-hosted the 2026 FIFA World Cup?",
+    "reference_answer": "The United States, Mexico, and Canada co-hosted the 2026 FIFA World Cup.",
+    "expected_facts": ["United States", "Mexico", "Canada"]
+  },
+  {
+    "id": "opening_match",
+    "question": "Where was the opening match of the 2026 FIFA World Cup played?",
+    "reference_answer": "The opening match was played at Estadio Azteca in Mexico City.",
+    "expected_facts": ["Estadio Azteca", "Mexico City"]
+  }
+]
